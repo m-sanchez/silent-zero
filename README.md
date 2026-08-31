@@ -1,9 +1,9 @@
 # silent-zero
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-erasable_syntax-3178C6?logo=typescript&logoColor=white)
-![Node](https://img.shields.io/badge/node-%3E%3D22.6-5FA04E?logo=nodedotjs&logoColor=white)
+![Node](https://img.shields.io/badge/node-%3E%3D22.18-5FA04E?logo=nodedotjs&logoColor=white)
 ![Dependencies](https://img.shields.io/badge/dependencies-0-B45309)
-![Tests](https://img.shields.io/badge/tests-11_passing-2F6F44)
+[![CI](https://github.com/m-sanchez/silent-zero/actions/workflows/test.yml/badge.svg)](https://github.com/m-sanchez/silent-zero/actions/workflows/test.yml)
 ![License](https://img.shields.io/badge/license-MIT-6E6E6E)
 
 Unknown is not zero. An eval for proving absence in very large data: four
@@ -48,8 +48,11 @@ honest zeros claimed, scoped: 1
 
 The naive reading (zero rows means it never happened) is exactly what a
 language model does with an empty retrieval, phrased fluently either way.
-The discipline never produces a false zero, and it still claims the one
-absence that is actually true, scope attached.
+And the number is measured, not authored: the same battery swept over 50
+seeded worlds and three scan budgets (150 runs) gives the naive reading a
+false-zero rate between 0.20 and 0.40 (mean 0.33), while the discipline
+produced zero false zeros across every run and still claimed 100% of the
+true absences, scope attached. `npm run demo` reproduces the sweep.
 
 ## The upgrade checklist
 
@@ -85,18 +88,26 @@ compareWindows(complete, capped);
 //               it is an artifact of the budget.' }
 ```
 
-## Run
+## Install
 
 ```bash
-npm install       # dev-only: typescript
-npm test          # node's built-in runner, via --experimental-strip-types
-npm run demo      # the table above, from the seeded world
+npm install github:m-sanchez/silent-zero#v2.0.0
+```
+
+Not yet on npm; the pinned git tag is the supported install and CI proves
+the packed tarball imports cleanly. Zero runtime dependencies.
+
+## Develop
+
+```bash
+npm ci            # dev-only: typescript
+npm test
+npm run demo      # the table and the sweep, reproduced
 npm run typecheck
 ```
 
-Node 22.6+ (erasable-syntax TypeScript, node runs it directly). Zero
-runtime dependencies. All data is synthetic and seeded; every number above
-is reproducible.
+Node 22.18+ (erasable-syntax TypeScript; node runs the sources directly).
+All data is synthetic and seeded; every number above is reproducible.
 
 ## The tests are the point
 
@@ -110,3 +121,6 @@ is reproducible.
 | ingestion lag blocks the freshest slice | "the past week" quietly excludes where the action is |
 | eval: naive 2 false zeros, discipline 0 | the checklist is the difference, measured |
 | capped window cannot serve as a baseline | both denominators, or no comparison |
+| a zero baseline is not-comparable | "up from nothing" is not a trend |
+| a degraded hit is present, caveats attached | the discipline applies to hits too |
+| the sweep: 0 discipline false zeros over seeds x budgets | measured, not authored |

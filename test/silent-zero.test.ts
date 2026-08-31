@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { naiveAbsence, upgrade } from '../src/claim.ts';
 import { compareWindows } from '../src/compare.ts';
-import { runEval } from '../src/evaluate.ts';
+import { runEval, runSweep } from '../src/evaluate.ts';
 import { query } from '../src/store.ts';
 import { generateWorld, trueInteractions } from '../src/world.ts';
 
@@ -125,4 +125,39 @@ test('a capped window cannot serve as a baseline', () => {
   const alsoComplete = { result: query(world, scopeB), scope: scopeB };
   const fair = compareWindows(complete, alsoComplete);
   assert.equal(fair.kind, 'comparable');
+});
+
+test('a zero baseline is not-comparable: no divide-by-zero ships as a trend', () => {
+  const scopeEmpty = {
+    sources: ['transactions'],
+    window: [10, 20] as [number, number],
+    subjects: ['acct-brakewater', 'acct-greyfield'] as [string, string]
+  };
+  const scopeBusy = { ...scopeEmpty, subjects: ['acct-eastgate'] as [string] };
+  const comparison = compareWindows(
+    { result: query(world, scopeEmpty), scope: scopeEmpty },
+    { result: query(world, scopeBusy), scope: scopeBusy }
+  );
+  assert.equal(comparison.kind, 'not-comparable');
+  assert.match((comparison as { statement: string }).statement, /no denominator/);
+});
+
+test('a hit from a degraded read is present, with the caveats attached', () => {
+  const scope = {
+    sources: ['transactions', 'messages', 'telemetry'],
+    window: [0, 90] as [number, number],
+    subjects: ['acct-eastgate'] as [string]
+  };
+  const verdict = upgrade(query(world, scope, { scanBudget: 5_000 }), scope);
+  assert.equal(verdict.kind, 'present');
+  const present = verdict as Extract<typeof verdict, { kind: 'present' }>;
+  assert.ok(present.caveats.some((c) => c.startsWith('search.completed')));
+});
+
+test('the sweep is measured: zero discipline false zeros across seeds and budgets', () => {
+  const sweep = runSweep(8, [15_000, 30_000]);
+  assert.equal(sweep.runs, 16);
+  assert.equal(sweep.disciplineFalseZeros, 0);
+  assert.ok(sweep.naiveFalseZeroRate.mean > 0, 'the naive reading keeps failing');
+  assert.equal(sweep.honestZeroMissRate, 0, 'true absences are still claimed');
 });

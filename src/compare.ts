@@ -44,6 +44,16 @@ export function compareWindows(
     };
   }
   const counts: [number, number] = [a.result.rows.length, b.result.rows.length];
-  const change = counts[0] === 0 ? (counts[1] === 0 ? 0 : Infinity) : counts[1] / counts[0] - 1;
+  if (counts[0] === 0) {
+    // The repo about zero denominators does not ship a divide-by-zero as
+    // a comparison. A zero baseline is not a small baseline.
+    return {
+      kind: 'not-comparable',
+      failing: [{ window: 0, name: 'baseline.nonzero', detail: 'the baseline window has zero qualifying rows' }],
+      statement:
+        'windows are not comparable: the baseline is zero, so there is no denominator to compare against. "Up from nothing" is not a trend.'
+    };
+  }
+  const change = counts[1] / counts[0] - 1;
   return { kind: 'comparable', counts, change };
 }

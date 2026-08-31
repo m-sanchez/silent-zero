@@ -104,6 +104,63 @@ export function cases(world: World): Case[] {
   ];
 }
 
+export interface SweepReport {
+  seeds: number;
+  budgets: number[];
+  runs: number;
+  naiveFalseZeroRate: { min: number; max: number; mean: number };
+  disciplineFalseZeros: number;
+  honestZeroMissRate: number;
+}
+
+/** The measured version: many seeds, several scan budgets. The discipline
+ * claiming zero false zeros is asserted over every run, not authored into
+ * one demo world. */
+export function runSweep(seedCount = 50, budgets: number[] = [15_000, 25_000, 35_000]): SweepReport {
+  let runs = 0;
+  let disciplineFalseZeros = 0;
+  let honestZeroClaims = 0;
+  let honestZeroChances = 0;
+  const naiveRates: number[] = [];
+  for (let seed = 1; seed <= seedCount; seed++) {
+    for (const budget of budgets) {
+      const world = generateWorld(seed);
+      let naiveFalse = 0;
+      let total = 0;
+      for (const c of cases(world)) {
+        const options = c.id === 'incomplete-zero' ? { scanBudget: budget } : c.options;
+        const result = query(world, c.scope, options);
+        const truly =
+          c.scope.subjects.length === 2 &&
+          trueInteractions(world, c.scope.subjects[0], c.scope.subjects[1], c.scope.window).length === 0;
+        const naive = naiveAbsence(result);
+        const verdict = upgrade(result, c.scope);
+        total++;
+        if (naive && !truly) naiveFalse++;
+        if (verdict.kind === 'absent-within-scope') {
+          if (!truly) disciplineFalseZeros++;
+          else honestZeroClaims++;
+        }
+        if (truly && c.plantedZero === 'honest') honestZeroChances++;
+      }
+      naiveRates.push(naiveFalse / total);
+      runs++;
+    }
+  }
+  return {
+    seeds: seedCount,
+    budgets,
+    runs,
+    naiveFalseZeroRate: {
+      min: Math.min(...naiveRates),
+      max: Math.max(...naiveRates),
+      mean: naiveRates.reduce((a, b) => a + b, 0) / naiveRates.length
+    },
+    disciplineFalseZeros,
+    honestZeroMissRate: honestZeroChances > 0 ? 1 - honestZeroClaims / honestZeroChances : 0
+  };
+}
+
 export function runEval(seed = 7): EvalReport {
   const world = generateWorld(seed);
   const outcomes: CaseOutcome[] = [];

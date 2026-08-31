@@ -26,3 +26,13 @@ console.log(
     `\ndiscipline false zeros: ${report.disciplineFalseZeros}` +
     `\nhonest zeros claimed, scoped: ${report.honestZerosClaimed}`
 );
+
+// The sweep: measured over many worlds and budgets, not authored into one.
+import { runSweep } from '../src/evaluate.ts';
+const sweep = runSweep();
+console.log(
+  `\nsweep: ${sweep.seeds} seeds x budgets [${sweep.budgets.join(', ')}] = ${sweep.runs} runs` +
+    `\nnaive false-zero rate: min ${sweep.naiveFalseZeroRate.min.toFixed(2)}, mean ${sweep.naiveFalseZeroRate.mean.toFixed(2)}, max ${sweep.naiveFalseZeroRate.max.toFixed(2)}` +
+    `\ndiscipline false zeros across all runs: ${sweep.disciplineFalseZeros}` +
+    `\nhonest zeros claimed when truly absent: ${((1 - sweep.honestZeroMissRate) * 100).toFixed(0)}%`
+);

@@ -17,6 +17,9 @@ export type AbsenceVerdict =
   | {
       kind: 'present';
       evidence: { count: number; firstAt: number };
+      /** requirement failures still worth knowing about: a hit from a
+       * truncated or half-covered read is a hit, but not the whole story */
+      caveats: string[];
     }
   | {
       kind: 'absent-within-scope';
@@ -74,24 +77,26 @@ export function requirements(result: QueryResult, scope: Scope, opts: UpgradeOpt
     });
   }
 
-  if (scope.subjects.length === 2) {
-    out.push({
-      name: 'coverage.subjects',
-      ok: true,
-      detail:
-        'relationship claim: both sides read from the same sources and window here; with per-subject collection, both sides need their own coverage check'
-    });
-  }
-
+  // No per-subject coverage row: in this simulator both sides of a
+  // relationship claim read the same sources over the same window, so a
+  // separate check would be a permanently-green light. With per-subject
+  // collection, the both-sides rule needs its own requirement; see the
+  // article.
   return out;
 }
 
 /** Upgrade an observation into an absence claim, or refuse to. */
 export function upgrade(result: QueryResult, scope: Scope, opts: UpgradeOptions = {}): AbsenceVerdict {
   if (result.rows.length > 0) {
+    // The discipline applies to hits too: a row found by a truncated or
+    // malformed read is still a row, but the claim carries its caveats.
+    const caveats = requirements(result, scope, opts)
+      .filter((r) => !r.ok)
+      .map((r) => `${r.name}: ${r.detail}`);
     return {
       kind: 'present',
-      evidence: { count: result.rows.length, firstAt: result.rows[0].t }
+      evidence: { count: result.rows.length, firstAt: result.rows[0].t },
+      caveats
     };
   }
   const checks = requirements(result, scope, opts);

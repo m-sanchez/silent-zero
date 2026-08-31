@@ -1,19 +1,25 @@
 {
   "name": "silent-zero",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Unknown is not zero: an eval for proving absence in very large data. Four kinds of zero, one checklist that tells them apart.",
   "type": "module",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "files": [
+    "dist",
     "src"
   ],
   "scripts": {
-    "test": "node --experimental-strip-types --test \"test/*.test.ts\"",
-    "demo": "node --experimental-strip-types demo/demo.ts",
-    "typecheck": "tsc --noEmit"
+    "test": "node --test \"test/*.test.ts\"",
+    "demo": "node demo/demo.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build"
   },
   "repository": {
     "type": "git",
@@ -32,10 +38,11 @@
     "typescript"
   ],
   "engines": {
-    "node": ">=22.6"
+    "node": ">=22.18"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",
     "typescript": "^5.7.0"
-  }
+  },
+  "types": "./dist/index.d.ts"
 }
