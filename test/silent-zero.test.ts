@@ -161,3 +161,18 @@ test('the sweep is measured: zero discipline false zeros across seeds and budget
   assert.ok(sweep.naiveFalseZeroRate.mean > 0, 'the naive reading keeps failing');
   assert.equal(sweep.honestZeroMissRate, 0, 'true absences are still claimed');
 });
+
+test('a typoed subject id is a phantom-entity zero, not an absence', () => {
+  const scope = {
+    sources: ['transactions'],
+    window: [10, 70] as [number, number],
+    // 'brakewater' with the e dropped: parses, scans, matches nothing
+    subjects: ['acct-brakwater', 'acct-greyfield'] as [string, string]
+  };
+  const result = query(world, scope);
+  const verdict = upgrade(result, scope);
+  assert.equal(verdict.kind, 'observation', 'a phantom entity must never reach an absence claim');
+  const failed = (verdict as { failed: Array<{ name: string }> }).failed.map((f) => f.name);
+  assert.ok(failed.includes('query.valid'));
+  assert.deepEqual(result.execution.unknownSubjects, ['acct-brakwater']);
+});

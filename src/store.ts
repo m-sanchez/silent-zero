@@ -41,6 +41,11 @@ export interface Execution {
   /** predicates on fields that exist nowhere, run anyway instead of rejected */
   unknownPredicates: string[];
   unknownSources: string[];
+  /** subject identifiers that exist nowhere in the world: a transposed
+   *  character, a stale alias, the wrong tenant. The query parses, the scan
+   *  completes, every row fails the join, and the zero is about the id, not
+   *  about the world (the phantom-entity failure mode) */
+  unknownSubjects: string[];
 }
 
 export interface QueryResult {
@@ -67,6 +72,7 @@ export function query(world: World, scope: Scope, opts: QueryOptions = {}): Quer
   }
 
   const unknownSources = scope.sources.filter((s) => !world.sources.some((p) => p.name === s));
+  const unknownSubjects = scope.subjects.filter((s) => !world.subjects.includes(s));
   const profiles = world.sources.filter((p) => scope.sources.includes(p.name));
 
   // What part of the requested window is actually searchable per source.
@@ -125,7 +131,8 @@ export function query(world: World, scope: Scope, opts: QueryOptions = {}): Quer
       truncatedAt,
       windowCovered,
       unknownPredicates,
-      unknownSources
+      unknownSources,
+      unknownSubjects
     }
   };
 }

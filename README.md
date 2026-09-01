@@ -9,7 +9,7 @@
 
 > **In plain English:** proving something is NOT in a huge dataset is harder than finding it; this shows how to trust a "nothing found" answer instead of assuming the search just missed it.
 
-Unknown is not zero. An eval for proving absence in very large data: four
+Unknown is not zero. An eval for proving absence in very large data: five
 kinds of zero, one checklist that tells them apart.
 
 [The article](https://miguelsanchez.co.uk/writing/the-silent-zero-proving-absence/) ·
@@ -28,17 +28,22 @@ truth attached, a budgeted store that fails the way real engines fail, and
 the upgrade checklist that separates the one zero worth citing from the
 three that lie.
 
-## The four zeros
+## The five zeros
 
 ```
 honest zero      searched everything, nothing there   the only one worth citing
 coverage zero    nothing was collected there          a gap in collection, not a fact
 malformed zero   the question was silently broken     ran perfectly, asked the wrong thing
 incomplete zero  the search never finished            the emptiness of a search abandoned
+phantom zero     the id in the filter is not real     a zero about the id, not the world
 ```
 
-One number on the screen, four meanings, and nothing in the bare result to
-tell them apart. `npm run demo` plants all four and grades two readers:
+The phantom zero is the one production hits most: a transposed character in
+an account id, a stale alias, the wrong tenant. The query parses, the scan
+completes, coverage is 100%, and every row fails the join — so the emptiest,
+most confident answer in the set is the one about an entity that does not
+exist. One number on the screen, five meanings, and nothing in the bare
+result to tell them apart. `npm run demo` plants all four and grades two readers:
 
 ```
 case              truth    naive reading         upgrade discipline
@@ -74,9 +79,10 @@ const verdict = upgrade(query(world, scope, { scanBudget: 25_000 }), scope);
 
 `upgrade` promotes "no matching records" to "absence supported within
 scope" only when every requirement holds: the query parsed with nothing
-silently tolerated, the search completed with no cap or truncation, and
-every source in scope was searchable for the whole window, ingestion lag
-and outages included. Any requirement unmet and the result stays an
+silently tolerated — no predicate on a field that exists nowhere, no
+unknown source, and no subject identifier the world has never heard of —
+the search completed with no cap or truncation, and every source in scope
+was searchable for the whole window, ingestion lag and outages included. Any requirement unmet and the result stays an
 observation with the failing condition named, because "we did not finish
 looking" and "there was nothing to find" must never share a sentence.
 

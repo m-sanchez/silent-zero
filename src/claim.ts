@@ -48,13 +48,18 @@ export function requirements(result: QueryResult, scope: Scope, opts: UpgradeOpt
 
   out.push({
     name: 'query.valid',
-    ok: ex.unknownPredicates.length === 0 && ex.unknownSources.length === 0,
+    ok:
+      ex.unknownPredicates.length === 0 &&
+      ex.unknownSources.length === 0 &&
+      ex.unknownSubjects.length === 0,
     detail:
       ex.unknownPredicates.length > 0
         ? `predicate on a field that exists nowhere: ${ex.unknownPredicates.join(', ')}; the query ran perfectly and asked the wrong thing`
         : ex.unknownSources.length > 0
           ? `unknown source: ${ex.unknownSources.join(', ')}`
-          : 'the question parsed and every predicate resolved'
+          : ex.unknownSubjects.length > 0
+            ? `subject that exists nowhere: ${ex.unknownSubjects.join(', ')}; every row failed the join, so the zero is about the identifier and not about the world`
+            : 'the question parsed, every predicate resolved, and every subject exists'
   });
 
   out.push({

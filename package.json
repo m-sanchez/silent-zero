@@ -4,7 +4,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "Unknown is not zero: an eval for proving absence in very large data. Four kinds of zero, one checklist that tells them apart.",
+  "description": "Unknown is not zero: an eval for proving absence in very large data. Five kinds of zero, one checklist that tells them apart.",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
