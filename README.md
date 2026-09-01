@@ -6,6 +6,8 @@
 [![CI](https://github.com/m-sanchez/silent-zero/actions/workflows/test.yml/badge.svg)](https://github.com/m-sanchez/silent-zero/actions/workflows/test.yml)
 ![License](https://img.shields.io/badge/license-MIT-6E6E6E)
 
+> **In plain English:** proving something is NOT in a huge dataset is harder than finding it; this shows how to trust a "nothing found" answer instead of assuming the search just missed it.
+
 Unknown is not zero. An eval for proving absence in very large data: four
 kinds of zero, one checklist that tells them apart.
 
