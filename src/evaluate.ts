@@ -1,11 +1,13 @@
 /** The eval: run the same absence questions through the naive reading and
  * the upgrade discipline, against ground truth the world generator knows.
  *
- * Four kinds of zero exist and the bare result cannot tell them apart:
+ * Five kinds of zero exist and the bare result cannot tell them apart:
  * honest (searched everything, nothing there), coverage (nothing was
  * collected), malformed (the question was silently broken), incomplete
- * (the search never finished). Only the honest zero supports a claim
- * about the world. The eval plants all four and scores who can tell. */
+ * (the search never finished), phantom (the identifier in the filter is
+ * not real). Only the honest zero supports a claim about the world, and
+ * only within the scope it names. The eval plants all five, adds the cases
+ * where the two readings correctly disagree, and scores who can tell. */
 
 import { naiveAbsence, upgrade } from './claim.ts';
 import type { UpgradeOptions } from './claim.ts';

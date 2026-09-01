@@ -4,7 +4,7 @@
  * ceiling is correct engineering. The danger is the shape it gives to
  * failure: a query over budget does not fail loudly, it comes back partial
  * or empty, and partial-or-empty is exactly what a true negative looks
- * like. This simulator reproduces the four ways a zero can happen, and
+ * like. This simulator reproduces the five ways a zero can happen, and
  * stamps an execution record honest enough to tell them apart. */
 
 import type { EventRecord, World } from './world.ts';
