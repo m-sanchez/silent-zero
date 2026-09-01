@@ -65,9 +65,25 @@ export function requirements(result: QueryResult, scope: Scope, opts: UpgradeOpt
   out.push({
     name: 'search.completed',
     ok: ex.completed,
+    // Real engines often report THAT they stopped without reporting where;
+    // "cut off at t=undefined" is not a report, so say what is known.
     detail: ex.completed
       ? `scan finished (${ex.scanned} rows examined)`
-      : `scan cut off at t=${ex.truncatedAt?.toFixed(1)} after ${ex.scanned} rows; the emptiness of a search abandoned`
+      : ex.truncatedAt === null
+        ? `scan did not finish after ${ex.scanned} rows, and the engine did not say where it stopped; the emptiness of a search abandoned`
+        : `scan cut off at t=${ex.truncatedAt.toFixed(1)} after ${ex.scanned} rows; the emptiness of a search abandoned`
+  });
+
+  // An execution that reports matches next to a result carrying no rows is
+  // an execution nobody should build a claim on. Unreachable from this
+  // repo's own store, reachable the moment an adapter maps a real engine.
+  out.push({
+    name: 'census.consistent',
+    ok: !(result.rows.length === 0 && ex.matched > 0),
+    detail:
+      result.rows.length === 0 && ex.matched > 0
+        ? `the execution reports ${ex.matched} match(es) but no rows were carried: the two halves of this record disagree`
+        : 'the rows carried and the matches reported agree'
   });
 
   for (const source of scope.sources) {
@@ -81,8 +97,8 @@ export function requirements(result: QueryResult, scope: Scope, opts: UpgradeOpt
         covered >= 1
           ? `window fully searchable`
           : covered >= floor
-            ? `${(covered * 100).toFixed(0)}% of the window searchable, floor ${floor.toFixed(2)} (outage or ingestion lag)`
-            : `only ${(covered * 100).toFixed(0)}% of the window searchable (outage or ingestion lag)`
+            ? `${(covered * 100).toFixed(0)}% of the window searchable, floor ${floor.toFixed(2)}`
+            : `only ${(covered * 100).toFixed(0)}% of the window searchable: a gap in collection, in ingestion, or in the search itself`
     });
   }
 

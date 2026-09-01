@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { naiveAbsence, requirements, upgrade } from '../src/claim.ts';
+import { fromBigQuery, fromElasticsearch } from '../src/adapt.ts';
 import { compareWindows } from '../src/compare.ts';
 import { runEval, runSweep } from '../src/evaluate.ts';
 import { query } from '../src/store.ts';
@@ -264,4 +265,140 @@ test('a false zero is not counted as an honest zero claimed', () => {
   assert.equal(upgrades.length, 4, 'four claims were made');
   assert.equal(report.disciplineFalseZeros, 1, 'one of them was wrong');
   assert.equal(report.honestZerosClaimed, 3, 'so three honest zeros were claimed, not four');
+});
+
+/** An Execution built by hand, the way an adapter over a real engine builds
+ *  one. Only the fields under test differ from a clean run. */
+const execution = (over: Partial<import('../src/store.ts').Execution> = {}) => ({
+  completed: true,
+  scanned: 0,
+  matched: 0,
+  truncatedAt: null,
+  windowCovered: { logs: 1 },
+  unknownPredicates: [],
+  unknownSources: [],
+  unknownSubjects: [],
+  ...over
+});
+const realScope = {
+  sources: ['logs'],
+  window: [0, 7] as [number, number],
+  subjects: ['acct-1'] as [string]
+};
+
+test('an engine that cannot say where it stopped still gets a readable failure', () => {
+  const result = { rows: [], execution: execution({ completed: false, scanned: 4_000 }) };
+  const verdict = upgrade(result, realScope);
+  assert.equal(verdict.kind, 'observation');
+  const detail = (verdict as { failed: Array<{ name: string; detail: string }> }).failed.find(
+    (f) => f.name === 'search.completed'
+  )!.detail;
+  assert.doesNotMatch(detail, /undefined/, 'a report that reads "t=undefined" is not a report');
+  assert.match(detail, /4000 rows/);
+});
+
+test('a record that reports matches but carries no rows cannot become an absence', () => {
+  const result = { rows: [], execution: execution({ matched: 3, scanned: 900 }) };
+  const verdict = upgrade(result, realScope);
+  assert.equal(verdict.kind, 'observation', 'three matches and no rows is not a searched-and-empty');
+  const failed = (verdict as { failed: Array<{ name: string }> }).failed.map((f) => f.name);
+  assert.ok(failed.includes('census.consistent'));
+});
+
+/** epoch days, the unit this library's windows are in */
+const DAY_MS = 86_400_000;
+const esScope = {
+  sources: ['app-logs'],
+  window: [20_330, 20_337] as [number, number],
+  subjects: ['acct-1'] as [string]
+};
+
+test('an Elasticsearch zero from a terminated search is an observation, not an absence', () => {
+  const response = {
+    took: 4210,
+    timed_out: false,
+    terminated_early: true,
+    _shards: { total: 12, successful: 11, skipped: 0, failed: 1 },
+    hits: { total: { value: 0, relation: 'eq' as const }, hits: [] }
+  };
+  const ex = fromElasticsearch(response, esScope);
+  assert.equal(ex.completed, false, 'terminated_early is a search that stopped early');
+  assert.ok(ex.windowCovered['app-logs']! < 1, 'a failed shard is a slice nobody searched');
+  const verdict = upgrade({ rows: [], execution: ex }, esScope);
+  assert.equal(verdict.kind, 'observation');
+  const failed = (verdict as { failed: Array<{ name: string }> }).failed.map((f) => f.name);
+  assert.deepEqual(failed, ['search.completed', 'coverage.app-logs']);
+});
+
+test('an Elasticsearch total of "gte" is a lower bound, and a lower bound is not a census', () => {
+  const response = {
+    timed_out: false,
+    _shards: { total: 4, successful: 4, skipped: 0, failed: 0 },
+    hits: { total: { value: 10_000, relation: 'gte' as const }, hits: [] }
+  };
+  assert.equal(fromElasticsearch(response, esScope).completed, false);
+});
+
+test('a clean Elasticsearch zero upgrades and reports what it searched', () => {
+  const response = {
+    timed_out: false,
+    terminated_early: false,
+    _shards: { total: 12, successful: 12, skipped: 0, failed: 0 },
+    hits: { total: { value: 0, relation: 'eq' as const }, hits: [] }
+  };
+  const ex = fromElasticsearch(response, esScope, { knownSources: ['app-logs'], knownSubjects: ['acct-1'] });
+  const verdict = upgrade({ rows: [], execution: ex }, esScope);
+  assert.equal(verdict.kind, 'absent-within-scope');
+  assert.match((verdict as { statement: string }).statement, /window fully covered: app-logs 100%/);
+});
+
+test('an adapter given a catalogue catches the phantom entity too', () => {
+  const response = {
+    timed_out: false,
+    _shards: { total: 4, successful: 4, skipped: 0, failed: 0 },
+    hits: { total: { value: 0, relation: 'eq' as const }, hits: [] }
+  };
+  const scope = { ...esScope, subjects: ['acct-typo'] as [string] };
+  const ex = fromElasticsearch(response, scope, { knownSubjects: ['acct-1', 'acct-2'] });
+  assert.deepEqual(ex.unknownSubjects, ['acct-typo']);
+  assert.equal(upgrade({ rows: [], execution: ex }, scope).kind, 'observation');
+});
+
+test('a BigQuery cache hit cannot cover the part of the window it never saw', () => {
+  const scope = {
+    sources: ['events'],
+    window: [20_330, 20_337] as [number, number],
+    subjects: ['acct-1'] as [string]
+  };
+  const job = {
+    jobComplete: true,
+    status: { state: 'DONE' },
+    statistics: {
+      endTime: String(20_334 * DAY_MS),
+      query: { cacheHit: true, totalBytesProcessed: '0' }
+    },
+    totalRows: '0'
+  };
+  const ex = fromBigQuery(job, scope);
+  assert.equal(ex.windowCovered['events'], 4 / 7, 'the cached answer knows nothing after it was computed');
+  assert.equal(upgrade({ rows: [], execution: ex }, scope).kind, 'observation');
+});
+
+test('a BigQuery job that hit its billing ceiling never finished', () => {
+  const scope = {
+    sources: ['events'],
+    window: [20_330, 20_337] as [number, number],
+    subjects: ['acct-1'] as [string]
+  };
+  const job = {
+    jobComplete: true,
+    status: { state: 'DONE' },
+    configuration: { query: { maximumBytesBilled: '1000000000' } },
+    statistics: {
+      endTime: String(20_337 * DAY_MS),
+      query: { cacheHit: false, totalBytesProcessed: '999999999', totalBytesBilled: '1000000000' }
+    },
+    totalRows: '0'
+  };
+  assert.equal(fromBigQuery(job, scope).completed, false);
 });

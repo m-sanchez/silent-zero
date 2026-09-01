@@ -133,6 +133,58 @@ prices it: 150 of 150 runs lost where the hole was placed on the evidence,
 6 of 150 where the hole was half a day of ordinary ingestion lag. The floor
 is not a nuisance parameter. It is the guarantee.
 
+## Real engines
+
+`Execution` is this repo's record, not anyone's wire format, so `src/adapt.ts`
+ships the two mappings that matter and documents the shape closely enough to
+write your own for Splunk or Snowflake in ten lines. Both take the response
+object your client already parsed: no client, no network, no dependency.
+
+```ts
+import { fromElasticsearch, upgrade } from '@m-sanchez/silent-zero';
+
+// terminated_early: true, _shards: { total: 12, successful: 11, failed: 1 }
+const execution = fromElasticsearch(response, scope, {
+  knownSources: catalogue.indices,
+  knownSubjects: catalogue.accountIds
+});
+upgrade({ rows: [], execution }, scope);
+// { kind: 'observation', failed: [
+//   { name: 'search.completed',
+//     detail: 'scan did not finish after 0 rows, and the engine did not
+//              say where it stopped; the emptiness of a search abandoned' },
+//   { name: 'coverage.app-logs',
+//     detail: 'only 92% of the window searchable: a gap in collection,
+//              in ingestion, or in the search itself' } ] }
+```
+
+| what the engine reports | what it means to the checklist |
+| :-- | :-- |
+| ES `terminated_early`, `timed_out` | `completed: false` |
+| ES `hits.total.relation: 'gte'` | `completed: false`; a lower bound is not a census |
+| ES dropped aggregation buckets | `completed: false` |
+| ES `_shards.failed` | coverage below 1: a shard that errored is a slice nobody searched |
+| ES `_shards.skipped` | coverage only if you pass `skippedShardsSearched: false` |
+| BQ `errorResult`, non-fatal `errors`, `jobComplete: false` | `completed: false` |
+| BQ bytes billed at `maximumBytesBilled` | `completed: false`; what stops at a ceiling did not finish |
+| BQ `cacheHit` | coverage only up to the instant the answer was computed |
+| BQ partitions read against `partitionsRequested` | coverage below 1 |
+
+Two rules the adapters keep and yours should: nothing is guessed, and where
+the engine is silent the adapter withholds coverage rather than assuming it.
+`truncatedAt` stays null in both, because neither engine says *where* it
+stopped, and inventing a cut-off would be a fabrication in the one place
+this library has to be exact.
+
+A cache hit is the subtle one. It is a real zero from a real search, just
+not from this moment: the window after the answer was computed was never
+looked at, so coverage is cut at that instant rather than reported as whole.
+
+And no engine can tell you whether the identifiers in your filter are real.
+Pass `knownSources` and `knownSubjects` from your catalogue and the phantom
+zero is caught here too; leave them out and `query.valid` has nothing to
+check, which is a hole in your evidence rather than in this code.
+
 ## Baselines are denominators too
 
 Absence is the sharpest case of a wider family: claims that borrow their

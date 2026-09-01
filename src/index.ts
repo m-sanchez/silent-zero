@@ -1,3 +1,11 @@
+export { fromBigQuery, fromElasticsearch } from './adapt.ts';
+export type {
+  AdaptOptions,
+  BigQueryJob,
+  BigQueryOptions,
+  ElasticsearchOptions,
+  ElasticsearchResponse
+} from './adapt.ts';
 export { naiveAbsence, requirements, upgrade } from './claim.ts';
 export type { AbsenceVerdict, Requirement, UpgradeOptions } from './claim.ts';
 export { compareWindows } from './compare.ts';
