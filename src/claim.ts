@@ -72,13 +72,17 @@ export function requirements(result: QueryResult, scope: Scope, opts: UpgradeOpt
 
   for (const source of scope.sources) {
     const covered = ex.windowCovered[source] ?? 0;
+    // The detail reports the measured fraction, never a rounded-up verdict:
+    // a claim that passed on a relaxed floor must say so out loud.
     out.push({
       name: `coverage.${source}`,
       ok: covered >= floor,
       detail:
-        covered >= floor
+        covered >= 1
           ? `window fully searchable`
-          : `only ${(covered * 100).toFixed(0)}% of the window searchable (outage or ingestion lag)`
+          : covered >= floor
+            ? `${(covered * 100).toFixed(0)}% of the window searchable, floor ${floor.toFixed(2)} (outage or ingestion lag)`
+            : `only ${(covered * 100).toFixed(0)}% of the window searchable (outage or ingestion lag)`
     });
   }
 
@@ -116,11 +120,20 @@ export function upgrade(result: QueryResult, scope: Scope, opts: UpgradeOptions 
     };
   }
   const windowText = `days ${scope.window[0]} to ${scope.window[1]}`;
+  // The census is built from the measured coverage, not from the fact that
+  // it cleared the floor. A repo about claims carrying their scope does not
+  // ship a claim that rounds 80% up to "fully covered".
+  const measured = scope.sources.map((s) => [s, result.execution.windowCovered[s] ?? 0] as const);
+  const coverageText = measured.map(([s, c]) => `${s} ${(c * 100).toFixed(0)}%`).join(', ');
+  const floor = opts.coverageFloor ?? 1;
+  const coverageClause = measured.every(([, c]) => c >= 1)
+    ? `window fully covered: ${coverageText}`
+    : `window covered ${coverageText}; floor ${floor.toFixed(2)}`;
   return {
     kind: 'absent-within-scope',
     scope,
     census: { scanned: result.execution.scanned, windowCovered: result.execution.windowCovered },
-    statement: `no qualifying record exists in ${scope.sources.join(', ')} over ${windowText} (${result.execution.scanned} rows examined, window fully covered)`
+    statement: `no qualifying record exists in ${scope.sources.join(', ')} over ${windowText} (${result.execution.scanned} rows examined, ${coverageClause})`
   };
 }
 

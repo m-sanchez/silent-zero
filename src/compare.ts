@@ -8,6 +8,7 @@
  * silently serve as anyone's baseline. */
 
 import { requirements } from './claim.ts';
+import type { UpgradeOptions } from './claim.ts';
 import type { QueryResult, Scope } from './store.ts';
 
 export type Comparison =
@@ -26,11 +27,14 @@ export type Comparison =
 
 export function compareWindows(
   a: { result: QueryResult; scope: Scope },
-  b: { result: QueryResult; scope: Scope }
+  b: { result: QueryResult; scope: Scope },
+  /** the same options `upgrade` takes: both public APIs must judge the same
+   *  result by the same floor, or a user who relaxes one gets two verdicts */
+  opts: UpgradeOptions = {}
 ): Comparison {
   const failing: Array<{ window: 0 | 1; name: string; detail: string }> = [];
   ([a, b] as const).forEach((side, i) => {
-    for (const r of requirements(side.result, side.scope)) {
+    for (const r of requirements(side.result, side.scope, opts)) {
       if (!r.ok) failing.push({ window: i as 0 | 1, name: r.name, detail: r.detail });
     }
   });

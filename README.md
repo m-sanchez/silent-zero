@@ -86,6 +86,26 @@ was searchable for the whole window, ingestion lag and outages included. Any req
 observation with the failing condition named, because "we did not finish
 looking" and "there was nothing to find" must never share a sentence.
 
+## Coverage floors, and what relaxing one costs
+
+The default floor is 1.0: every source in scope must be searchable for the
+whole window or there is no upgrade. On real data that default refuses
+almost everything — two days of telemetry ingestion lag alone put 100%
+coverage of a recent window out of reach — so the floor is adjustable, and
+the price of adjusting it is printed on the claim:
+
+```ts
+upgrade(result, scope, { coverageFloor: 0.7 }).statement;
+// 'no qualifying record exists in telemetry over days 80 to 90
+//  (2556 rows examined, window covered telemetry 80%; floor 0.70)'
+```
+
+The words "fully covered" appear only when every source measured 1.0. Below
+that the claim carries the coverage it earned and the floor that let it
+through: a tool that rounds 80% up to "fully covered" is committing the
+exact error it was built to catch. `compareWindows` takes the same options,
+so the two public APIs cannot reach different verdicts on one result.
+
 ## Baselines are denominators too
 
 Absence is the sharpest case of a wider family: claims that borrow their

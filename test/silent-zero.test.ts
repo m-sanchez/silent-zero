@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { naiveAbsence, upgrade } from '../src/claim.ts';
+import { naiveAbsence, requirements, upgrade } from '../src/claim.ts';
 import { compareWindows } from '../src/compare.ts';
 import { runEval, runSweep } from '../src/evaluate.ts';
 import { query } from '../src/store.ts';
@@ -175,4 +175,47 @@ test('a typoed subject id is a phantom-entity zero, not an absence', () => {
   const failed = (verdict as { failed: Array<{ name: string }> }).failed.map((f) => f.name);
   assert.ok(failed.includes('query.valid'));
   assert.deepEqual(result.execution.unknownSubjects, ['acct-brakwater']);
+});
+
+test('a relaxed coverage floor reports the coverage it measured, not "fully covered"', () => {
+  const scope = {
+    sources: ['telemetry'],
+    window: [80, 90] as [number, number],
+    subjects: ['acct-brakewater', 'acct-greyfield'] as [string, string]
+  };
+  const result = query(world, scope);
+  assert.equal(result.execution.windowCovered['telemetry'], 0.8, 'ingestion lag eats the last two days');
+  const verdict = upgrade(result, scope, { coverageFloor: 0.7 });
+  assert.equal(verdict.kind, 'absent-within-scope');
+  const statement = (verdict as { statement: string }).statement;
+  assert.doesNotMatch(statement, /fully covered/, '80% of a window is not a covered window');
+  assert.match(statement, /telemetry 80%/, 'the claim carries the coverage it actually had');
+  assert.match(statement, /floor 0\.70/, 'and the floor that let it through');
+});
+
+test('compareWindows honours the same coverage floor as upgrade', () => {
+  const scopeA = {
+    sources: ['telemetry'],
+    window: [60, 70] as [number, number],
+    subjects: ['acct-eastgate'] as [string]
+  };
+  const scopeB = { ...scopeA, window: [80, 90] as [number, number] };
+  const a = { result: query(world, scopeA), scope: scopeA };
+  const b = { result: query(world, scopeB), scope: scopeB };
+  assert.equal(compareWindows(a, b).kind, 'not-comparable', 'at the default floor the lagged window is out');
+  const relaxed = compareWindows(a, b, { coverageFloor: 0.7 });
+  assert.equal(relaxed.kind, 'comparable', 'the two public APIs cannot disagree about the same floor');
+});
+
+test('a passing coverage requirement says how much of the window it searched', () => {
+  const scope = {
+    sources: ['telemetry'],
+    window: [80, 90] as [number, number],
+    subjects: ['acct-brakewater', 'acct-greyfield'] as [string, string]
+  };
+  const checks = requirements(query(world, scope), scope, { coverageFloor: 0.7 });
+  const coverage = checks.find((r) => r.name === 'coverage.telemetry')!;
+  assert.equal(coverage.ok, true, 'a 0.7 floor lets 80% through');
+  assert.doesNotMatch(coverage.detail, /fully searchable/, 'but it was not fully searchable');
+  assert.match(coverage.detail, /80% of the window searchable/);
 });
