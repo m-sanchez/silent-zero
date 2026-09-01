@@ -5,6 +5,7 @@
 ![Dependencies](https://img.shields.io/badge/dependencies-0-B45309)
 [![CI](https://github.com/m-sanchez/silent-zero/actions/workflows/test.yml/badge.svg)](https://github.com/m-sanchez/silent-zero/actions/workflows/test.yml)
 ![License](https://img.shields.io/badge/license-MIT-6E6E6E)
+[![npm](https://img.shields.io/npm/v/@m-sanchez/silent-zero?color=CB3837&logo=npm&logoColor=white)](https://www.npmjs.com/package/@m-sanchez/silent-zero)
 
 > **In plain English:** proving something is NOT in a huge dataset is harder than finding it; this shows how to trust a "nothing found" answer instead of assuming the search just missed it.
 
@@ -14,6 +15,10 @@ kinds of zero, one checklist that tells them apart.
 [The article](https://miguelsanchez.co.uk/writing/the-silent-zero-proving-absence/) ·
 [More tools](https://github.com/m-sanchez) ·
 [Working rules](https://miguelsanchez.co.uk/ethics)
+
+*Provenance: a fresh, dependency-free implementation of standard methods,
+written to test the systems the other tools came from. First published
+2026-08-31.*
 
 The most dangerous result a large data platform can return is zero rows.
 The system reports "I found no matching records", an observation about a
@@ -59,7 +64,7 @@ true absences, scope attached. `npm run demo` reproduces the sweep.
 ## The upgrade checklist
 
 ```ts
-import { query, upgrade, generateWorld } from 'silent-zero';
+import { query, upgrade, generateWorld } from '@m-sanchez/silent-zero';
 
 const verdict = upgrade(query(world, scope, { scanBudget: 25_000 }), scope);
 // { kind: 'observation',
@@ -93,11 +98,12 @@ compareWindows(complete, capped);
 ## Install
 
 ```bash
-npm install github:m-sanchez/silent-zero#v2.0.0
+npm install @m-sanchez/silent-zero
 ```
 
-Not yet on npm; the pinned git tag is the supported install and CI proves
-the packed tarball imports cleanly. Zero runtime dependencies.
+Also installable from a pinned git tag:
+`github:m-sanchez/silent-zero#v2.0.1`. CI proves the packed tarball imports
+cleanly. Zero runtime dependencies.
 
 ## Develop
 
