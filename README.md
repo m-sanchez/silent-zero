@@ -43,28 +43,50 @@ an account id, a stale alias, the wrong tenant. The query parses, the scan
 completes, coverage is 100%, and every row fails the join — so the emptiest,
 most confident answer in the set is the one about an entity that does not
 exist. One number on the screen, five meanings, and nothing in the bare
-result to tell them apart. `npm run demo` plants all four and grades two readers:
+result to tell them apart. `npm run demo` plants all five and grades two
+readers, each against the claim it actually makes: the naive reading says
+"no such event occurred", so the world grades it; the discipline says
+"absent within this scope", so the scope grades it.
 
 ```
-case              truth    naive reading         upgrade discipline
-honest-zero       absent   absent                absent-within-scope
-coverage-zero     absent   absent                observation
-malformed-zero    present  absent  << FALSE ZERO observation
-incomplete-zero   present  absent  << FALSE ZERO observation
-not-a-zero        present  present               present
+case                 truth            naive reading         upgrade discipline
+honest-zero          absent           absent                absent-within-scope
+coverage-zero        absent           absent                observation
+malformed-zero       present          absent  << FALSE ZERO observation
+incomplete-zero      present          absent  << FALSE ZERO observation
+not-a-zero           present          present               present
+phantom-entity-zero  present          absent  << FALSE ZERO observation
+scope-honest-zero    absent in scope  absent  << FALSE ZERO absent-within-scope
+truncated-only-zero  present          absent  << FALSE ZERO observation
+relaxed-floor-zero   present          absent  << FALSE ZERO absent-within-scope  << FALSE ZERO
+lagged-tail-zero     absent in scope  absent  << FALSE ZERO absent-within-scope
 
-naive false zeros: 2
-discipline false zeros: 0
-honest zeros claimed, scoped: 1
+naive false zeros: 7
+discipline false zeros: 1
+honest zeros claimed, scoped: 3
 ```
+
+`absent in scope` is the distinction the two readers exist to argue about:
+the pair met, but not in the source the question named, so "not in
+transactions" is true and "it never happened" is false. `truncated-only-zero`
+fails exactly one requirement, `search.completed`, which is what isolating a
+failure mode looks like. And `relaxed-floor-zero` is the discipline losing:
+told it could claim at half coverage, it claimed, and the record was in the
+half nobody searched.
 
 The naive reading (zero rows means it never happened) is exactly what a
 language model does with an empty retrieval, phrased fluently either way.
-And the number is measured, not authored: the same battery swept over 50
-seeded worlds and three scan budgets (150 runs) gives the naive reading a
-false-zero rate between 0.20 and 0.40 (mean 0.33), while the discipline
-produced zero false zeros across every run and still claimed 100% of the
-true absences, scope attached. `npm run demo` reproduces the sweep.
+The battery is adversarial by construction, so these rates describe the
+battery, not your data — what the sweep buys is that the discipline's arm
+can now lose, which is the only thing that makes its number evidence.
+Swept over 50 seeded worlds and three scan budgets (150 runs of 10 cases):
+the naive reading's false-zero rate runs 0.50 to 0.70 (mean 0.59). The
+discipline produced **zero** false zeros at the default coverage floor of
+1.0, and **156** once the floor was relaxed — 150 of 150 runs of
+`relaxed-floor-zero`, which is designed to lose, and 6 of 150 runs of
+`lagged-tail-zero`, where whether half a day of ingestion lag hides
+anything is up to the seed. It claimed 100% of the true absences it had a
+fair chance at, scope attached. `npm run demo` reproduces all of it.
 
 ## The upgrade checklist
 
@@ -106,6 +128,11 @@ through: a tool that rounds 80% up to "fully covered" is committing the
 exact error it was built to catch. `compareWindows` takes the same options,
 so the two public APIs cannot reach different verdicts on one result.
 
+A relaxed floor is a real risk and not a formality, which is why the sweep
+prices it: 150 of 150 runs lost where the hole was placed on the evidence,
+6 of 150 where the hole was half a day of ordinary ingestion lag. The floor
+is not a nuisance parameter. It is the guarantee.
+
 ## Baselines are denominators too
 
 Absence is the sharpest case of a wider family: claims that borrow their
@@ -128,7 +155,7 @@ npm install @m-sanchez/silent-zero
 ```
 
 Also installable from a pinned git tag:
-`github:m-sanchez/silent-zero#v2.0.1`. CI proves the packed tarball imports
+`github:m-sanchez/silent-zero#v3.0.0`. CI proves the packed tarball imports
 cleanly. Zero runtime dependencies.
 
 ## Develop
@@ -152,9 +179,17 @@ All data is synthetic and seeded; every number above is reproducible.
 | truncated search never upgrades | an execution ceiling cannot manufacture a negative fact |
 | outage window fails coverage, not absence | a gap in collection is a fact about the system |
 | tolerated unknown predicate fails query.valid | a query that ran perfectly can still ask the wrong thing |
+| a typoed subject id never reaches an absence claim | a zero about an identifier is not a zero about the world |
 | ingestion lag blocks the freshest slice | "the past week" quietly excludes where the action is |
-| eval: naive 2 false zeros, discipline 0 | the checklist is the difference, measured |
+| a relaxed floor reports the coverage it measured | a claim carries its units or it is not a claim |
+| compareWindows honours the same floor as upgrade | one result cannot have two verdicts |
+| ground truth can be asked of a scope | an oracle that cannot express the claim cannot score it |
+| eval: naive 7 false zeros, discipline 1 | the checklist is the difference, and where it fails is published |
 | capped window cannot serve as a baseline | both denominators, or no comparison |
 | a zero baseline is not-comparable | "up from nothing" is not a trend |
 | a degraded hit is present, caveats attached | the discipline applies to hits too |
-| the sweep: 0 discipline false zeros over seeds x budgets | measured, not authored |
+| the sweep loses the relaxed-floor case | a discipline that cannot lose is not being measured |
+| the sweep: 0 discipline false zeros at floor 1.0 | measured, not authored |
+
+Every externally checkable claim in this README is mapped to the test that
+enforces it in [CLAIMS.md](CLAIMS.md).

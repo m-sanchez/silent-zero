@@ -100,11 +100,16 @@ test('ingestion lag trims the freshest slice and blocks the upgrade', () => {
   assert.equal(upgrade(result, scope).kind, 'observation');
 });
 
-test('the eval: the naive reading produces false zeros, the discipline none', () => {
+test('the eval: the naive reading fails broadly, the discipline only on a relaxed floor', () => {
   const report = runEval(7);
-  assert.ok(report.naiveFalseZeros >= 2, 'incomplete and malformed zeros fool the naive reading');
-  assert.equal(report.disciplineFalseZeros, 0);
-  assert.equal(report.honestZerosClaimed, 1, 'exactly the planted true absence is claimed');
+  assert.equal(report.naiveFalseZeros, 7, 'seven planted presences read as absences');
+  assert.equal(report.disciplineFalseZeros, 1);
+  assert.deepEqual(
+    report.outcomes.filter((o) => o.disciplineFalseZero).map((o) => o.id),
+    ['relaxed-floor-zero'],
+    'the one claim it gets wrong is the one it was told it could make at half coverage'
+  );
+  assert.equal(report.honestZerosClaimed, 3, 'three true absences claimed, scope attached');
   const buried = report.outcomes.find((o) => o.id === 'not-a-zero')!;
   assert.equal(buried.disciplineVerdict, 'present');
 });
@@ -154,12 +159,12 @@ test('a hit from a degraded read is present, with the caveats attached', () => {
   assert.ok(present.caveats.some((c) => c.startsWith('search.completed')));
 });
 
-test('the sweep is measured: zero discipline false zeros across seeds and budgets', () => {
+test('the sweep is measured: at the default floor the discipline loses nothing', () => {
   const sweep = runSweep(8, [15_000, 30_000]);
   assert.equal(sweep.runs, 16);
-  assert.equal(sweep.disciplineFalseZeros, 0);
-  assert.ok(sweep.naiveFalseZeroRate.mean > 0, 'the naive reading keeps failing');
-  assert.equal(sweep.honestZeroMissRate, 0, 'true absences are still claimed');
+  assert.equal(sweep.disciplineFalseZerosAtDefaultFloor, 0, 'across every seed and every budget');
+  assert.ok(sweep.naiveFalseZeroRate.mean > 0.5, 'the naive reading keeps failing');
+  assert.equal(sweep.honestZeroMissRate, 0, 'and true absences are still claimed');
 });
 
 test('a typoed subject id is a phantom-entity zero, not an absence', () => {
@@ -218,4 +223,45 @@ test('a passing coverage requirement says how much of the window it searched', (
   assert.equal(coverage.ok, true, 'a 0.7 floor lets 80% through');
   assert.doesNotMatch(coverage.detail, /fully searchable/, 'but it was not fully searchable');
   assert.match(coverage.detail, /80% of the window searchable/);
+});
+
+test('ground truth can be asked of a scope, not only of the whole world', () => {
+  const window = [75, 88] as [number, number];
+  const inWorld = trueInteractions(world, 'acct-copperline', 'acct-dunmore', window);
+  assert.equal(inWorld.length, 2, 'the world says present: two telemetry contacts');
+  const inTransactions = trueInteractions(world, 'acct-copperline', 'acct-dunmore', window, [
+    'transactions'
+  ]);
+  assert.equal(inTransactions.length, 0, 'transactions says absent, and that claim is true');
+});
+
+test('a scope-restricted absence is scored against its scope, not against the world', () => {
+  const report = runEval(7);
+  const scoped = report.outcomes.find((o) => o.id === 'scope-honest-zero')!;
+  assert.equal(scoped.disciplineVerdict, 'absent-within-scope');
+  assert.equal(scoped.disciplineFalseZero, false, 'the claim is true of the scope it names');
+  assert.equal(scoped.naiveFalseZero, true, '"no such event occurred" is false of the world');
+});
+
+test('the sweep can fail: a relaxed floor buys claims and costs false zeros', () => {
+  const sweep = runSweep(4, [15_000]);
+  assert.ok(sweep.disciplineFalseZeros > 0, 'a discipline that cannot lose is not being measured');
+  assert.deepEqual(Object.keys(sweep.disciplineFalseZerosByCase), ['relaxed-floor-zero']);
+  assert.equal(sweep.disciplineFalseZerosAtDefaultFloor, 0, 'at floor 1.0 it still loses nothing');
+});
+
+test('honestZeroMissRate is a rate: numerator and denominator count the same chances', () => {
+  const sweep = runSweep(4, [15_000]);
+  assert.ok(
+    sweep.honestZeroMissRate >= 0 && sweep.honestZeroMissRate <= 1,
+    `a miss rate outside [0,1] is a mismatched fraction, got ${sweep.honestZeroMissRate}`
+  );
+});
+
+test('a false zero is not counted as an honest zero claimed', () => {
+  const report = runEval(7);
+  const upgrades = report.outcomes.filter((o) => o.disciplineVerdict === 'absent-within-scope');
+  assert.equal(upgrades.length, 4, 'four claims were made');
+  assert.equal(report.disciplineFalseZeros, 1, 'one of them was wrong');
+  assert.equal(report.honestZerosClaimed, 3, 'so three honest zeros were claimed, not four');
 });

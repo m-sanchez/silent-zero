@@ -107,17 +107,27 @@ export function generateWorld(seed: number): World {
   return { seed, events, sources: SOURCES, subjects: SUBJECTS, now };
 }
 
-/** Ground truth: did the pair interact in the window, in the whole world? */
+/** Ground truth: did the pair interact in the window?
+ *
+ * With `sources`, the question is asked of a scope, which is the only
+ * question an absence claim ever answers: "no qualifying record exists in
+ * transactions" is true even when the pair met in telemetry. Without
+ * `sources`, it is asked of the whole world, which is what the naive
+ * reading asserts when it says "no such event occurred". Scoring the two
+ * readings against the same oracle scores one of them against a claim it
+ * never made. */
 export function trueInteractions(
   world: World,
   a: string,
   b: string,
-  window: [number, number]
+  window: [number, number],
+  sources?: string[]
 ): EventRecord[] {
   return world.events.filter(
     (e) =>
       e.t >= window[0] &&
       e.t < window[1] &&
+      (sources === undefined || sources.includes(e.source)) &&
       ((e.from === a && e.to === b) || (e.from === b && e.to === a))
   );
 }
