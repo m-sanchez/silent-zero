@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { naiveAbsence, requirements, upgrade } from '../src/claim.ts';
 import { fromBigQuery, fromElasticsearch } from '../src/adapt.ts';
 import { compareWindows } from '../src/compare.ts';
-import { runEval, runSweep } from '../src/evaluate.ts';
+import { cases, runEval, runSweep } from '../src/evaluate.ts';
 import { query } from '../src/store.ts';
 import { generateWorld, trueInteractions } from '../src/world.ts';
 
@@ -401,4 +402,225 @@ test('a BigQuery job that hit its billing ceiling never finished', () => {
     totalRows: '0'
   };
   assert.equal(fromBigQuery(job, scope).completed, false);
+});
+
+test('the phantom zero fails query.valid and nothing else', () => {
+  const scope = {
+    sources: ['transactions'],
+    window: [10, 70] as [number, number],
+    subjects: ['acct-brakwater', 'acct-greyfield'] as [string, string]
+  };
+  const failed = requirements(query(world, scope), scope).filter((r) => !r.ok);
+  assert.deepEqual(
+    failed.map((f) => f.name),
+    ['query.valid'],
+    'the query parsed, the scan finished and the window was whole: only the id was fiction'
+  );
+});
+
+test('truncated-only-zero isolates search.completed; incomplete-zero does not', () => {
+  const battery = cases(world);
+  const isolated = battery.find((c) => c.id === 'truncated-only-zero')!;
+  const failed = requirements(
+    query(world, isolated.scope, isolated.options),
+    isolated.scope,
+    isolated.upgradeOptions
+  ).filter((r) => !r.ok);
+  assert.deepEqual(failed.map((f) => f.name), ['search.completed']);
+
+  const overDetermined = battery.find((c) => c.id === 'incomplete-zero')!;
+  const alsoFailed = requirements(
+    query(world, overDetermined.scope, overDetermined.options),
+    overDetermined.scope
+  ).filter((r) => !r.ok);
+  assert.ok(alsoFailed.length > 1, 'the original incomplete case fails several at once');
+});
+
+test('the eval table is exactly the one the README publishes', () => {
+  const rows = runEval(7).outcomes.map((o) =>
+    [
+      o.id,
+      o.trulyAbsentInWorld ? 'absent' : o.trulyAbsent ? 'absent in scope' : 'present',
+      o.naiveSaysAbsent ? (o.naiveFalseZero ? 'absent  << FALSE ZERO' : 'absent') : 'present',
+      o.disciplineVerdict + (o.disciplineFalseZero ? '  << FALSE ZERO' : '')
+    ].join(' | ')
+  );
+  assert.deepEqual(rows, [
+    'honest-zero | absent | absent | absent-within-scope',
+    'coverage-zero | absent | absent | observation',
+    'malformed-zero | present | absent  << FALSE ZERO | observation',
+    'incomplete-zero | present | absent  << FALSE ZERO | observation',
+    'not-a-zero | present | present | present',
+    'phantom-entity-zero | present | absent  << FALSE ZERO | observation',
+    'scope-honest-zero | absent in scope | absent  << FALSE ZERO | absent-within-scope',
+    'truncated-only-zero | present | absent  << FALSE ZERO | observation',
+    'relaxed-floor-zero | present | absent  << FALSE ZERO | absent-within-scope  << FALSE ZERO',
+    'lagged-tail-zero | absent in scope | absent  << FALSE ZERO | absent-within-scope'
+  ]);
+});
+
+test('the published sweep numbers reproduce exactly', () => {
+  const sweep = runSweep();
+  assert.equal(sweep.runs, 150);
+  assert.equal(sweep.naiveFalseZeroRate.min.toFixed(2), '0.50');
+  assert.equal(sweep.naiveFalseZeroRate.mean.toFixed(2), '0.59');
+  assert.equal(sweep.naiveFalseZeroRate.max.toFixed(2), '0.70');
+  assert.equal(sweep.disciplineFalseZerosAtDefaultFloor, 0);
+  assert.equal(sweep.disciplineFalseZeros, 156);
+  assert.deepEqual(sweep.disciplineFalseZerosByCase, {
+    'relaxed-floor-zero': 150,
+    'lagged-tail-zero': 6
+  });
+  assert.equal(sweep.honestZeroMissRate, 0);
+});
+
+test('the checklist example in the README is the output the README quotes', () => {
+  const scope = {
+    sources: ['transactions', 'messages', 'telemetry'],
+    window: [0, 90] as [number, number],
+    subjects: ['acct-copperline', 'acct-dunmore'] as [string, string]
+  };
+  const verdict = upgrade(query(world, scope, { scanBudget: 25_000 }), scope);
+  assert.equal(verdict.kind, 'observation');
+  const failed = verdict as { failed: Array<{ name: string; detail: string }>; statement: string };
+  assert.equal(failed.failed[0]!.name, 'search.completed');
+  assert.equal(
+    failed.failed[0]!.detail,
+    'scan cut off at t=73.6 after 25000 rows; the emptiness of a search abandoned'
+  );
+  assert.ok(failed.statement.startsWith('no matching evidence found; absence NOT established'));
+});
+
+test('the coverage-floor example in the README is the statement the README quotes', () => {
+  const scope = {
+    sources: ['telemetry'],
+    window: [80, 90] as [number, number],
+    subjects: ['acct-brakewater', 'acct-greyfield'] as [string, string]
+  };
+  const verdict = upgrade(query(world, scope), scope, { coverageFloor: 0.7 });
+  assert.equal(
+    (verdict as { statement: string }).statement,
+    'no qualifying record exists in telemetry over days 80 to 90 (2556 rows examined, window covered telemetry 80%; floor 0.70)'
+  );
+});
+
+test('the adapter example in the README is the output the README quotes', () => {
+  const response = {
+    took: 4210,
+    timed_out: false,
+    terminated_early: true,
+    _shards: { total: 12, successful: 11, skipped: 0, failed: 1 },
+    hits: { total: { value: 0, relation: 'eq' as const }, hits: [] }
+  };
+  const ex = fromElasticsearch(response, esScope, {
+    knownSources: ['app-logs'],
+    knownSubjects: ['acct-1']
+  });
+  const verdict = upgrade({ rows: [], execution: ex }, esScope);
+  const failed = (verdict as { failed: Array<{ name: string; detail: string }> }).failed;
+  assert.deepEqual(
+    failed.map((f) => f.detail),
+    [
+      'scan did not finish after 0 rows, and the engine did not say where it stopped; the emptiness of a search abandoned',
+      'only 92% of the window searchable: a gap in collection, in ingestion, or in the search itself'
+    ]
+  );
+});
+
+test('every row of the Elasticsearch mapping table holds', () => {
+  const clean = {
+    timed_out: false,
+    terminated_early: false,
+    _shards: { total: 4, successful: 4, skipped: 0, failed: 0 },
+    hits: { total: { value: 0, relation: 'eq' as const }, hits: [] }
+  };
+  assert.equal(fromElasticsearch(clean, esScope).completed, true, 'the control');
+  assert.equal(fromElasticsearch({ ...clean, timed_out: true }, esScope).completed, false);
+  assert.equal(fromElasticsearch({ ...clean, terminated_early: true }, esScope).completed, false);
+  assert.equal(
+    fromElasticsearch(
+      { ...clean, aggregations: { by_account: { buckets: [{ key: 'a', doc_count: 3 }], sum_other_doc_count: 12 } } },
+      esScope
+    ).completed,
+    false,
+    'buckets the engine dropped answered a different question'
+  );
+  const skipping = { ...clean, _shards: { total: 4, successful: 4, skipped: 1, failed: 0 } };
+  assert.equal(fromElasticsearch(skipping, esScope).windowCovered['app-logs'], 1, 'can_match is trusted by default');
+  assert.equal(
+    fromElasticsearch(skipping, esScope, { skippedShardsSearched: false }).windowCovered['app-logs'],
+    0.75,
+    'and distrusted on request'
+  );
+  assert.deepEqual(
+    fromElasticsearch(clean, esScope, { knownSources: ['other-index'] }).unknownSources,
+    ['app-logs']
+  );
+  assert.equal(
+    fromElasticsearch(clean, esScope, { knownSources: ['other-index'] }).windowCovered['app-logs'],
+    0,
+    'an index nobody could resolve was searched over none of the window'
+  );
+  assert.equal(fromElasticsearch(clean, esScope).truncatedAt, null, 'never invented');
+  assert.equal(fromElasticsearch(clean, esScope, { rowsExamined: 900_000 }).scanned, 900_000);
+});
+
+test('every row of the BigQuery mapping table holds', () => {
+  const scope = {
+    sources: ['events'],
+    window: [20_330, 20_337] as [number, number],
+    subjects: ['acct-1'] as [string]
+  };
+  const clean = {
+    jobComplete: true,
+    status: { state: 'DONE' },
+    statistics: {
+      endTime: String(20_337 * DAY_MS),
+      query: { cacheHit: false, totalBytesProcessed: '4200000' }
+    },
+    totalRows: '0'
+  };
+  assert.equal(fromBigQuery(clean, scope).completed, true, 'the control');
+  assert.equal(fromBigQuery(clean, scope).windowCovered['events'], 1);
+  assert.equal(fromBigQuery({ ...clean, jobComplete: false }, scope).completed, false);
+  assert.equal(
+    fromBigQuery({ ...clean, status: { state: 'DONE', errorResult: { reason: 'quotaExceeded' } } }, scope).completed,
+    false
+  );
+  assert.equal(
+    fromBigQuery({ ...clean, status: { state: 'DONE', errors: [{ reason: 'backendError' }] } }, scope).completed,
+    false,
+    'a non-fatal error is still something that went wrong under the answer'
+  );
+  assert.equal(
+    fromBigQuery(
+      { ...clean, statistics: { ...clean.statistics, query: { cacheHit: true, totalBytesProcessed: '0' } } },
+      scope,
+      { computedAt: 20_333 }
+    ).windowCovered['events'],
+    3 / 7,
+    'a cached answer covers the window only up to when it was computed'
+  );
+  assert.equal(
+    fromBigQuery({ ...clean, statistics: { query: { cacheHit: true } } }, scope).windowCovered['events'],
+    0,
+    'and an undateable cache hit covers nothing rather than guessing'
+  );
+  assert.equal(
+    fromBigQuery(
+      { ...clean, statistics: { ...clean.statistics, query: { totalPartitionsProcessed: '6' } } },
+      scope,
+      { partitionsRequested: 8 }
+    ).windowCovered['events'],
+    0.75
+  );
+  assert.equal(fromBigQuery(clean, scope).truncatedAt, null, 'never invented');
+});
+
+test('zero runtime dependencies, as the README says on the tin', () => {
+  const pkg = JSON.parse(
+    readFileSync(new URL('../package.json', import.meta.url), 'utf8')
+  ) as { dependencies?: Record<string, string>; peerDependencies?: Record<string, string> };
+  assert.deepEqual(pkg.dependencies ?? {}, {});
+  assert.deepEqual(pkg.peerDependencies ?? {}, {});
 });

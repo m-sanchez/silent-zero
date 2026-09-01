@@ -26,7 +26,7 @@ query; the reader hears "no such event occurred", a claim about the world.
 This repo makes that gap executable: a seeded synthetic world with ground
 truth attached, a budgeted store that fails the way real engines fail, and
 the upgrade checklist that separates the one zero worth citing from the
-three that lie.
+four that lie.
 
 ## The five zeros
 
@@ -93,10 +93,19 @@ fair chance at, scope attached. `npm run demo` reproduces all of it.
 ```ts
 import { query, upgrade, generateWorld } from '@m-sanchez/silent-zero';
 
+const world = generateWorld(7);
+const scope = {
+  sources: ['transactions', 'messages', 'telemetry'],
+  window: [0, 90],
+  subjects: ['acct-copperline', 'acct-dunmore']
+};
 const verdict = upgrade(query(world, scope, { scanBudget: 25_000 }), scope);
 // { kind: 'observation',
-//   failed: [{ name: 'search.completed', detail: 'scan cut off at t=74.1 ...' }],
-//   statement: 'no matching evidence found; absence NOT established ...' }
+//   failed: [{ name: 'search.completed',
+//              detail: 'scan cut off at t=73.6 after 25000 rows; the
+//                       emptiness of a search abandoned' }, ...],
+//   statement: 'no matching evidence found; absence NOT established
+//               (search.completed, coverage.transactions, ... unmet)' }
 ```
 
 `upgrade` promotes "no matching records" to "absence supported within
@@ -104,9 +113,10 @@ scope" only when every requirement holds: the query parsed with nothing
 silently tolerated — no predicate on a field that exists nowhere, no
 unknown source, and no subject identifier the world has never heard of —
 the search completed with no cap or truncation, and every source in scope
-was searchable for the whole window, ingestion lag and outages included. Any requirement unmet and the result stays an
-observation with the failing condition named, because "we did not finish
-looking" and "there was nothing to find" must never share a sentence.
+was searchable for the whole window, ingestion lag and outages included.
+Any requirement unmet and the result stays an observation with the failing
+condition named, because "we did not finish looking" and "there was nothing
+to find" must never share a sentence.
 
 ## Coverage floors, and what relaxing one costs
 
@@ -240,8 +250,11 @@ All data is synthetic and seeded; every number above is reproducible.
 | capped window cannot serve as a baseline | both denominators, or no comparison |
 | a zero baseline is not-comparable | "up from nothing" is not a trend |
 | a degraded hit is present, caveats attached | the discipline applies to hits too |
+| a real Elasticsearch zero never upgrades | the taxonomy reaches engines, not only the simulator |
+| a BigQuery cache hit cannot cover what it never saw | a cached zero is a zero from a different moment |
 | the sweep loses the relaxed-floor case | a discipline that cannot lose is not being measured |
 | the sweep: 0 discipline false zeros at floor 1.0 | measured, not authored |
+| the published sweep numbers reproduce exactly | every figure above comes out of `npm test` |
 
 Every externally checkable claim in this README is mapped to the test that
 enforces it in [CLAIMS.md](CLAIMS.md).
