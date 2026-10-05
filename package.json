@@ -30,16 +30,20 @@
     "url": "git+https://github.com/m-sanchez/silent-zero.git"
   },
   "homepage": "https://miguelsanchez.co.uk/writing/the-silent-zero-proving-absence/",
+  "bugs": {
+    "url": "https://github.com/m-sanchez/silent-zero/issues"
+  },
   "author": "Miguel Sanchez <contact@miguelsanchez.co.uk>",
   "license": "MIT",
   "keywords": [
     "evals",
     "llm",
     "data-quality",
-    "epistemics",
-    "absence",
+    "evidence-of-absence",
+    "zero-results",
     "coverage",
-    "typescript"
+    "epistemics",
+    "big-data"
   ],
   "engines": {
     "node": ">=22.18"
